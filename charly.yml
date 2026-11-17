@@ -57,11 +57,20 @@ cdi:
               exit_status: 0
               command: |
                 set -eu
-                left=$(find /usr/lib /usr/lib64 -maxdepth 1 \( -type f -o -type l \) \
-                    \( -name 'libnvidia-*.so*' -o -name 'libcuda*.so*' -o -name 'libnvcuvid.so*' \
-                    -o -name 'libnvoptix.so*' -o -name 'libGLX_nvidia.so*' \
-                    -o -name 'libEGL_nvidia.so*' -o -name 'libGLESv1_CM_nvidia.so*' \
-                    -o -name 'libGLESv2_nvidia.so*' \) 2>/dev/null | wc -l)
+                # The directories are overridable so the assertion can be EXECUTED against fixtures
+                # (and so a bed can prove it discriminates) without a GPU or an image build. The
+                # default is the image's own layout.
+                libs=${CDI_LIB_DIRS:-/usr/lib /usr/lib64}
+                left=0
+                for d in $libs; do
+                  [ -d "$d" ] || continue
+                  n=$(find "$d" -maxdepth 1 \( -type f -o -type l \) \
+                      \( -name 'libnvidia-*.so*' -o -name 'libcuda*.so*' -o -name 'libnvcuvid.so*' \
+                      -o -name 'libnvoptix.so*' -o -name 'libGLX_nvidia.so*' \
+                      -o -name 'libEGL_nvidia.so*' -o -name 'libGLESv1_CM_nvidia.so*' \
+                      -o -name 'libGLESv2_nvidia.so*' \) 2>/dev/null | wc -l)
+                  left=$((left + n))
+                done
                 echo "cdi: driver libraries still baked: $left"
                 test "$left" -eq 0
 
@@ -71,9 +80,10 @@ cdi:
               exit_status: 0
               command: |
                 set -eu
+                bins=${CDI_BIN_DIRS:-/usr/bin /usr/local/bin /usr/sbin}
                 left=0
-                for d in /usr/bin /usr/local/bin /usr/sbin; do
-                  if [ ! -d "$d" ]; then continue; fi
+                for d in $bins; do
+                  [ -d "$d" ] || continue
                   n=$(find "$d" -maxdepth 1 \( -type f -o -type l \) -name 'nvidia*' 2>/dev/null | wc -l)
                   left=$((left + n))
                 done
