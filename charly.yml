@@ -60,7 +60,14 @@ cdi:
                 # The directories are overridable so the assertion can be EXECUTED against fixtures
                 # (and so a bed can prove it discriminates) without a GPU or an image build. The
                 # default is the image's own layout.
+                # THREE surfaces, because the removal touches three: the top-level libraries, the
+                # driver TREES the packages ship (nvidia/, vdpau/ — where libvdpau_nvidia.so lives),
+                # and the xorg driver. An assertion that only counts the first surface passes on an
+                # image whose vdpau/xorg driver content survived, which is exactly what the deleted
+                # strip's `rm -rf` lines existed to remove.
                 libs=${CDI_LIB_DIRS:-/usr/lib /usr/lib64}
+                trees=${CDI_TREE_DIRS:-/usr/lib/nvidia /usr/lib64/nvidia /usr/lib/vdpau}
+                xorg=${CDI_XORG_DRIVER:-/usr/lib/xorg/modules/drivers/nvidia_drv.so}
                 left=0
                 for d in $libs; do
                   [ -d "$d" ] || continue
@@ -68,9 +75,15 @@ cdi:
                       \( -name 'libnvidia-*.so*' -o -name 'libcuda*.so*' -o -name 'libnvcuvid.so*' \
                       -o -name 'libnvoptix.so*' -o -name 'libGLX_nvidia.so*' \
                       -o -name 'libEGL_nvidia.so*' -o -name 'libGLESv1_CM_nvidia.so*' \
-                      -o -name 'libGLESv2_nvidia.so*' \) 2>/dev/null | wc -l)
+                      -o -name 'libGLESv2_nvidia.so*' -o -name 'libvdpau_nvidia.so*' \) 2>/dev/null | wc -l)
                   left=$((left + n))
                 done
+                for d in $trees; do
+                  [ -d "$d" ] || continue
+                  n=$(find "$d" \( -type f -o -type l \) 2>/dev/null | wc -l)
+                  left=$((left + n))
+                done
+                if [ -e "$xorg" ] || [ -L "$xorg" ]; then left=$((left + 1)); fi
                 echo "cdi: driver libraries still baked: $left"
                 test "$left" -eq 0
 
