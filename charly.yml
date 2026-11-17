@@ -36,50 +36,14 @@ cdi:
             it.
         plan:
             # ---------------------------------------------------------------- the removal
-            - run: drop the host-coupled NVIDIA driver user-space and binaries, leaving the CDI injection as their only provider
-              id: cdi-drop-baked-driver
-              run_as: root
-              command: |
-                set -eu
-                removed=0
-                for d in /usr/lib /usr/lib64 /usr/lib64/nvidia; do
-                  if [ ! -d "$d" ] || [ -L "$d" ]; then continue; fi
-                  out=$(find "$d" -maxdepth 1 \( -type f -o -type l \) \
-                        \( -name 'libnvidia-*.so*' -o -name 'libcuda*.so*' \
-                        -o -name 'libnvcuvid.so*' -o -name 'libnvoptix.so*' \
-                        -o -name 'libGLX_nvidia.so*' -o -name 'libEGL_nvidia.so*' \
-                        -o -name 'libGLESv1_CM_nvidia.so*' -o -name 'libGLESv2_nvidia.so*' \) \
-                        -print -delete 2>/dev/null || true)
-                  n=$(printf '%s\n' "$out" | grep -c . || true)
-                  removed=$((removed + n))
-                done
-                rm -rf /usr/lib/nvidia /usr/lib64/nvidia /usr/lib/vdpau \
-                       /usr/lib/xorg/modules/drivers/nvidia_drv.so
-                echo "cdi: dropped $removed driver library file(s) plus the xorg/vdpau driver trees"
-
-                # The BINARIES are host-coupled in exactly the same way and the injection mounts
-                # them too (measured in a live pod: nvidia-smi, nvidia-cuda-mps-control/-server,
-                # nvidia-debugdump, nvidia-persistenced, nvidia-xconfig are all bind-mounted from
-                # the host). A baked copy is a second, wrong-version one, and for nvidia-smi an
-                # actively misleading one: it reports on the image's libraries instead of the ones
-                # injected with the running driver. The whole `nvidia*` set is deleted rather than a
-                # hand-listed subset, because a subset has to be right about every package's
-                # contents and will be wrong again — this layer's first revision missed
-                # nvidia-container-toolkit and its two runtime wrappers exactly that way.
-                #
-                # The NVIDIA CONTAINER TOOLKIT itself is host tooling: it generates the CDI spec and
-                # lives on the operator's machine, so an image copy is a second, drifting one that
-                # nothing runs.
-                binned=0
-                for d in /usr/bin /usr/local/bin /usr/sbin; do
-                  if [ ! -d "$d" ]; then continue; fi
-                  out=$(find "$d" -maxdepth 1 \( -type f -o -type l \) -name 'nvidia*' \
-                        -print -delete 2>/dev/null || true)
-                  n=$(printf '%s\n' "$out" | grep -c . || true)
-                  binned=$((binned + n))
-                done
-                echo "cdi: dropped $binned host-coupled nvidia binary/binaries"
-
+            # NOT here. The strip lives in `layer-cuda`, because `layer-cuda` is what installs
+            # `cuda` — and on the pac path `cuda` DEPENDS on `nvidia-utils`, so the toolkit layer is
+            # the one that pulls the driver user-space in and the one that must clean up after
+            # itself. Keeping the removal in exactly one place is the rule; this layer's job is to
+            # PROVE the result, which is the half that was missing.
+            #
+            # What a consumer must do: compose `layer-cuda` (which strips) and this layer (which
+            # asserts and probes), and name the image with a `-cdi` suffix.
             # ---------------------------------------------------------------- the build-time proof
             # A `run:` executes in the build container, where no CDI has injected anything, so a
             # match here is unambiguously IMAGE content. A `check:` step may run in a GPU-attached
@@ -93,11 +57,33 @@ cdi:
               exit_status: 0
               command: |
                 set -eu
-                left=$(find /usr/lib /usr/lib64 -maxdepth 1 \( -type f -o -type l \) \
-                    \( -name 'libnvidia-*.so*' -o -name 'libcuda*.so*' -o -name 'libnvcuvid.so*' \
-                    -o -name 'libnvoptix.so*' -o -name 'libGLX_nvidia.so*' \
-                    -o -name 'libEGL_nvidia.so*' -o -name 'libGLESv1_CM_nvidia.so*' \
-                    -o -name 'libGLESv2_nvidia.so*' \) 2>/dev/null | wc -l)
+                # The directories are overridable so the assertion can be EXECUTED against fixtures
+                # (and so a bed can prove it discriminates) without a GPU or an image build. The
+                # default is the image's own layout.
+                # THREE surfaces, because the removal touches three: the top-level libraries, the
+                # driver TREES the packages ship (nvidia/, vdpau/ — where libvdpau_nvidia.so lives),
+                # and the xorg driver. An assertion that only counts the first surface passes on an
+                # image whose vdpau/xorg driver content survived, which is exactly what the deleted
+                # strip's `rm -rf` lines existed to remove.
+                libs=${CDI_LIB_DIRS:-/usr/lib /usr/lib64}
+                trees=${CDI_TREE_DIRS:-/usr/lib/nvidia /usr/lib64/nvidia /usr/lib/vdpau}
+                xorg=${CDI_XORG_DRIVER:-/usr/lib/xorg/modules/drivers/nvidia_drv.so}
+                left=0
+                for d in $libs; do
+                  [ -d "$d" ] || continue
+                  n=$(find "$d" -maxdepth 1 \( -type f -o -type l \) \
+                      \( -name 'libnvidia-*.so*' -o -name 'libcuda*.so*' -o -name 'libnvcuvid.so*' \
+                      -o -name 'libnvoptix.so*' -o -name 'libGLX_nvidia.so*' \
+                      -o -name 'libEGL_nvidia.so*' -o -name 'libGLESv1_CM_nvidia.so*' \
+                      -o -name 'libGLESv2_nvidia.so*' -o -name 'libvdpau_nvidia.so*' \) 2>/dev/null | wc -l)
+                  left=$((left + n))
+                done
+                for d in $trees; do
+                  [ -d "$d" ] || continue
+                  n=$(find "$d" \( -type f -o -type l \) 2>/dev/null | wc -l)
+                  left=$((left + n))
+                done
+                if [ -e "$xorg" ] || [ -L "$xorg" ]; then left=$((left + 1)); fi
                 echo "cdi: driver libraries still baked: $left"
                 test "$left" -eq 0
 
@@ -107,9 +93,10 @@ cdi:
               exit_status: 0
               command: |
                 set -eu
+                bins=${CDI_BIN_DIRS:-/usr/bin /usr/local/bin /usr/sbin}
                 left=0
-                for d in /usr/bin /usr/local/bin /usr/sbin; do
-                  if [ ! -d "$d" ]; then continue; fi
+                for d in $bins; do
+                  [ -d "$d" ] || continue
                   n=$(find "$d" -maxdepth 1 \( -type f -o -type l \) -name 'nvidia*' 2>/dev/null | wc -l)
                   left=$((left + n))
                 done
@@ -143,7 +130,7 @@ cdi-skill:
         owner: cdi
         description: |-
             The CDI runtime contract for GPU images: no baked driver user-space or driver binaries,
-            the ICD JSONs that name SONARMEs rather than versions, and the probe that proves a
+            the ICD JSONs that name SONAMEs rather than versions, and the probe that proves a
             container resolved the INJECTED host driver at the running kernel module's version.
             MUST be invoked before composing or debugging any GPU image (nvidia, cuda, ollama,
             comfyui, immich-ml, jupyter-ml, python-ml, versa, unsloth-studio).
