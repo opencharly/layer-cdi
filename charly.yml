@@ -34,6 +34,19 @@ cdi:
             SONAME (`libGLX_nvidia.so.0`), not a version, so the link the injection creates
             satisfies them — which is why they are part of the contract rather than a violation of
             it.
+        require:
+            # THE ORDER IS THE CONTRACT. This layer's assertions must run AFTER every layer that
+            # can install host-coupled driver user-space, and `cuda` is that layer: on the pac path
+            # `pacman -S cuda` DEPENDS on nvidia-utils. Measured: with no requirement, the ordering
+            # put this layer BEFORE cuda and its assertion reported
+            #   cdi: driver libraries still baked: 138
+            # on a box that composes both — a true reading of a half-built image, and exactly the
+            # class of noise that makes a gate ignorable. Requiring the toolkit makes the order a
+            # property of the graph instead of a property of how a box happens to list its candies.
+            #
+            # A CPU-only image does not compose this layer at all: the CDI contract is about how a
+            # container gets a GPU driver, so an image with no CUDA toolkit has nothing to assert.
+            - '@github.com/opencharly/layer-cuda:v2026.321.1520'
         plan:
             # ---------------------------------------------------------------- the removal
             # NOT here. The strip lives in `layer-cuda`, because `layer-cuda` is what installs
