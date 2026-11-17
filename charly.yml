@@ -51,10 +51,12 @@ cdi:
             # /proc/self/mountinfo could tell them apart (not readable on every venue; measured red
             # on a CORRECT image for exactly that reason). Enforcement that cannot be fooled lives
             # here.
-            - check: no host-coupled driver library is baked — the injection is the only provider
+            # A `run:` rather than a `check:` for two reasons that agree: a candy must carry at least
+            # one install-bearing step to be composable at all, and the assertion BELONGS at build
+            # time, where it can neither be skipped nor see an injection.
+            - run: no host-coupled driver library is baked — the injection is the only provider
               id: cdi-no-baked-driver-libs
-              context: [deploy]
-              exit_status: 0
+              run_as: root
               command: |
                 set -eu
                 # The directories are overridable so the assertion can be EXECUTED against fixtures
@@ -87,10 +89,9 @@ cdi:
                 echo "cdi: driver libraries still baked: $left"
                 test "$left" -eq 0
 
-            - check: no host-coupled nvidia binary is baked — the injection is the only provider
+            - run: no host-coupled nvidia binary is baked — the injection is the only provider
               id: cdi-no-baked-driver-binaries
-              context: [deploy]
-              exit_status: 0
+              run_as: root
               command: |
                 set -eu
                 bins=${CDI_BIN_DIRS:-/usr/bin /usr/local/bin /usr/sbin}
