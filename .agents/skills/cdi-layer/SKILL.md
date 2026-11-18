@@ -1,6 +1,9 @@
 ---
 name: cdi-layer
-description: The `cdi` candy itself — what it removes, what it deliberately keeps, its build-time assertion and its runtime probe. Load when editing candy/cdi, the driver-user-space strip, or the injected-driver check.
+description: |-
+  The `cdi` CANDY itself — what it removes, what it deliberately keeps (the ICD JSONs), the
+  build-time assertion that cannot be fooled, and the runtime check that catches a shadowed
+  injection.
 family: distros
 ---
 
