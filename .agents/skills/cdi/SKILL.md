@@ -1,6 +1,11 @@
 ---
 name: cdi
-description: The CDI runtime contract for GPU images — why the driver user-space must come from the host injection and never from the image, what an image must therefore not contain, and the two proofs (build-time and runtime) that it does not. Load before composing or debugging any GPU image.
+description: |-
+  The CDI runtime contract for GPU images: no baked driver user-space or driver binaries,
+  the ICD JSONs that name SONAMEs rather than versions, and the probe that proves a
+  container resolved the INJECTED host driver at the running kernel module's version.
+  MUST be invoked before composing or debugging any GPU image (nvidia, cuda, ollama,
+  comfyui, immich-ml, jupyter-ml, python-ml, versa, unsloth-studio).
 family: distros
 ---
 
