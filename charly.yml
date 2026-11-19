@@ -49,11 +49,15 @@ cdi:
             #
             # The tag is not decoration: it names the release whose `cuda-drop-driver-userspace`
             # holds the `drv=` predicate that `cdi-no-baked-driver-libs` below duplicates. The
-            # anchored strip landed at v2026.323.0124 (layer-cuda#24); every release BEFORE that
-            # one strips with the over-broad `libcuda*.so*` and deletes the CUDA runtime, so this
-            # layer cannot assert a coherent image against that pin. v2026.323.0138 (layer-cuda#26)
-            # carries the same `drv=` and extends the producer's survival assertion to the
-            # toolkit's static archives — pin and assertion move together (opencharly/layer-cdi#6).
+            # anchored strip landed at v2026.323.0124 (layer-cuda#24) — the FIRST release whose
+            # strip this assertion can twin. The historical half is narrower than it reads: of
+            # the 18 `layer-cuda` releases before .0124, exactly ONE — v2026.321.1520 — carries
+            # a `libcuda*` strip, and it is the over-broad prefix glob `libcuda*.so*` that
+            # deletes the CUDA runtime; the other 17 carry no `libcuda*` strip at all, so their
+            # driver libraries survive and a red there is a different, TRUE reason
+            # (opencharly/layer-cdi#8). v2026.323.0138 (layer-cuda#26) carries the same `drv=`
+            # and extends the producer's survival assertion to the toolkit's static archives —
+            # pin and assertion move together (opencharly/layer-cdi#6).
             #
             # v2026.323.0252 (layer-cuda#30) keeps that same `drv=` and DROPS
             # `require: layer-nvidia`. That matters HERE and not only in the toolkit: a `require:`
