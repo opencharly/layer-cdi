@@ -48,10 +48,12 @@ cdi:
             # container gets a GPU driver, so an image with no CUDA toolkit has nothing to assert.
             #
             # The tag is not decoration: it names the release whose `cuda-drop-driver-userspace`
-            # holds the `drv=` predicate that `cdi-no-baked-driver-libs` below duplicates. A
-            # release before v2026.323.0138 strips with the over-broad `libcuda*.so*` and deletes
-            # the CUDA runtime, so this layer cannot assert a coherent image against it — pin and
-            # assertion move together (opencharly/layer-cdi#6).
+            # holds the `drv=` predicate that `cdi-no-baked-driver-libs` below duplicates. The
+            # anchored strip landed at v2026.323.0124 (layer-cuda#24); every release BEFORE that
+            # one strips with the over-broad `libcuda*.so*` and deletes the CUDA runtime, so this
+            # layer cannot assert a coherent image against that pin. v2026.323.0138 (layer-cuda#26)
+            # carries the same `drv=` and extends the producer's survival assertion to the
+            # toolkit's static archives — pin and assertion move together (opencharly/layer-cdi#6).
             - '@github.com/opencharly/layer-cuda:v2026.323.0138'
         plan:
             # ---------------------------------------------------------------- the removal
@@ -88,12 +90,13 @@ cdi:
                 # strip's `rm -rf` lines existed to remove.
                 # ── THE LIBRARY PREDICATE IS THE TWIN OF `layer-cuda`'s STRIP ────────────
                 # The ONE definition of "driver user-space" lives in opencharly/layer-cuda, in
-                # the `drv=` variable of its `cuda-drop-driver-userspace` step — the release at
-                # tag `v2026.323.0138` (its `origin/main`, commit 1514520). THIS list must hold
-                # exactly that set: what the producer promises to REMOVE is what this consumer
-                # is entitled to see absent. They CANNOT be shared — each is a shell fragment
-                # inside a different repo's `charly.yml` plan step, and neither repo has an
-                # include that reaches into the other's plan — so the duplication is deliberate
+                # the `drv=` variable of its `cuda-drop-driver-userspace` step — read at tag
+                # `v2026.323.0138` (its `origin/main`, commit 1514520), and byte-identical at
+                # `v2026.323.0124`, the release that landed the anchored strip. THIS list must
+                # hold exactly that set: what the producer promises to REMOVE is what this
+                # consumer is entitled to see absent. They CANNOT be shared — each is a shell
+                # fragment inside a different repo's `charly.yml` plan step, and neither repo has
+                # an include that reaches into the other's plan — so the duplication is deliberate
                 # and BOTH sides name each other. The `drv=` line below is byte-identical to the
                 # producer's on purpose, so `diff` of the two blocks is the drift control; change
                 # one and change the other in the same cutover, and move the `require:` tag at
@@ -111,15 +114,31 @@ cdi:
                 # libcudart.so, libcudart.so.13, libcudart.so.13.5.37 — and turned every pod
                 # image build red (opencharly/layer-cdi#6).
                 #
-                # `libvdpau_nvidia.so*` used to sit in this list and is deliberately gone: it is
-                # not in the producer's `drv=`, and its home is the `vdpau` TREE that the loop
-                # below counts wholesale. An assertion may not be STRICTER than the producer's
-                # guarantee — that is the same false-red defect, one library over.
+                # `libvdpau_nvidia.so*` is the ONE driver library the producer covers by a TREE
+                # rather than by a pattern (`rm -rf /usr/lib/vdpau`), so this step counts it in
+                # BOTH shapes — the explicit pattern below (a copy that escaped the tree) and the
+                # vdpau tree the loop counts wholesale. Dropping it, as this PR's first round did,
+                # was a weakening: the tree loop alone would stop seeing a top-level copy. Its
+                # home on every layout measured is the tree (`/usr/lib/vdpau/libvdpau_nvidia.so`,
+                # `.so.1`, `.so.615.78.08`, and `/usr/lib64` is a symlink to `lib` on CachyOS —
+                # measured, `stat` gives both paths inode 32:143773 — so the two names are one
+                # directory), and the top-level name cannot false-red: `/usr/lib{,64}/libvdpau.so*`
+                # is Mesa's shim, a DIFFERENT name. It sits outside the `drv=` twin because the
+                # producer does not match it by name at top level, not because it is not driver
+                # user-space.
                 #
-                # `set -f` is load-bearing. $drv is expanded UNQUOTED — that is how the -o chain
-                # is spliced into the find(1) expression — and without it the shell would
-                # pathname-expand `libcuda.so*` against the CURRENT DIRECTORY before find saw it.
-                # The producer's copy needs it for the same reason, and its `drv=` text is
+                # What this step does NOT count, and why: the producer's `rm -rf` names
+                # `/usr/lib/vdpau` only. A distro whose `/usr/lib64` is a real directory would
+                # leave `/usr/lib64/vdpau` behind, and this host additionally carries
+                # `/usr/lib32/vdpau` (measured; no image measured here ships it). Counting those
+                # here would red a build the producer cannot make correct — the same false-red
+                # class this PR fixes — so they are filed against the producer instead:
+                # opencharly/layer-cuda#28.
+                #
+                # `set -f` is load-bearing. $drv and $vdpau are expanded UNQUOTED — that is how
+                # the -o chains are spliced into the find(1) expression — and without it the shell
+                # would pathname-expand `libcuda.so*` against the CURRENT DIRECTORY before find saw
+                # it. The producer's copy needs it for the same reason, and its `drv=` text is
                 # byte-identical to the assignment below, quotes and all — which is what lets
                 # `diff` of the two blocks be the drift control rather than an eyeball.
                 set -f
@@ -127,13 +146,14 @@ cdi:
                 -o -name libnvcuvid.so* -o -name libnvoptix.so* -o -name libGLX_nvidia.so* \
                 -o -name libEGL_nvidia.so* -o -name libGLESv1_CM_nvidia.so* \
                 -o -name libGLESv2_nvidia.so*"
+                vdpau="-name libvdpau_nvidia.so*"
                 libs=${CDI_LIB_DIRS:-/usr/lib /usr/lib64}
                 trees=${CDI_TREE_DIRS:-/usr/lib/nvidia /usr/lib64/nvidia /usr/lib/vdpau}
                 xorg=${CDI_XORG_DRIVER:-/usr/lib/xorg/modules/drivers/nvidia_drv.so}
                 left=0
                 for d in $libs; do
                   [ -d "$d" ] || continue
-                  n=$(find "$d" -maxdepth 1 \( -type f -o -type l \) \( $drv \) 2>/dev/null | wc -l)
+                  n=$(find "$d" -maxdepth 1 \( -type f -o -type l \) \( $drv -o $vdpau \) 2>/dev/null | wc -l)
                   left=$((left + n))
                 done
                 for d in $trees; do
