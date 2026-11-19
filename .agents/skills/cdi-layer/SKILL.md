@@ -57,3 +57,9 @@ is the layer that pulls the driver user-space in and therefore the one that clea
 2. `find /usr/lib /usr/lib32 /usr/lib64 -maxdepth 1 -name 'libnvidia-*.so*'` — a leftover here means a LATER
    layer reinstalled the package; find which and have it compose `cdi` after its installs.
 3. On the host: `charly doctor` reports the CDI mechanism and the host's own userspace/module pair.
+
+- **A pod with a CDI device must not use `userns=keep-id`.** The injection fails with
+  `mount_setattr … EPERM` because an idmapped mount needs `CAP_SYS_ADMIN` in the user namespace that
+  owns the filesystem's superblock; with `userns=host` no idmap is requested. `/charly-cdi:cdi`
+  carries the measurement and the two legal shapes (bind → `userns=host` + container-root workload;
+  named volume → `keep-id` is fine).
