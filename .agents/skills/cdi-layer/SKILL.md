@@ -9,16 +9,28 @@ family: distros
 
 # The `cdi` candy
 
-One plan, three parts, in this order:
+One plan, two parts, in this order — the REMOVAL is not here:
 
 | Step | Kind | Why it lives there |
 |---|---|---|
-| `cdi-drop-baked-driver` | `run:` (root) | Removes the driver user-space and the `nvidia*` binaries a package install pulled in. |
-| `cdi-no-baked-driver-libs` / `cdi-no-baked-driver-binaries` | `check:` (`deploy`) | Asserts the removal held — files AND links AND versioned files, and the whole `nvidia*` binary set. |
+| `cdi-no-baked-driver-libs` / `cdi-no-baked-driver-binaries` | `run:` (root, build) | Asserts the removal held — files AND links AND versioned files, the `nvidia`/`vdpau` trees, the xorg driver, and the whole `nvidia*` binary set. |
 | `cdi-injected-driver-matches-module` | `check:` (`runtime`) | Asserts the container resolved the injected driver and that its version equals `/proc/driver/nvidia/version`. |
+
+The removal itself lives in `layer-cuda`'s `cuda-drop-driver-userspace` step, which this candy
+`require:`s: that layer installs `cuda`, and on the pac path `cuda` depends on `nvidia-utils`, so it
+is the layer that pulls the driver user-space in and therefore the one that cleans up after itself.
 
 ## Editing rules
 
+- **The library predicate is the twin of `layer-cuda`'s `drv=`, byte for byte.** The producer's
+  `drv=` variable in `cuda-drop-driver-userspace` is the ONE definition of "driver user-space"; the
+  `drv=` in `cdi-no-baked-driver-libs` must compare equal to it (`diff` of the two blocks is the
+  drift control). They cannot be shared — two shell fragments in two repos' plan steps — so the
+  duplication is deliberate, both sides name each other, and a change to one moves the `require:`
+  tag and the other in the same cutover. `drv=` is anchored: `libcuda.so*`, never `libcuda*`, plus an
+  explicit `libcudadebugger.so*`, which is driver user-space without the `libcuda.so` stem. A prefix
+  glob here counts `libcudart*` — the runtime this contract must KEEP — as a violation
+  (opencharly/layer-cdi#6).
 - **Never narrow the patterns to a hand-listed subset.** This candy's first revision did, and its own
   assertion immediately caught three leftovers it had missed (`nvidia-container-toolkit` and its two
   `nvidia-container-runtime.<variant>` wrappers) — the package also ships `nvidia-ngx-updater`,

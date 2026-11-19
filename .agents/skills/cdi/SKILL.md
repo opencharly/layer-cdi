@@ -56,12 +56,19 @@ user-space too. Installing the toolkit is enough to bake the driver.
 ## The contract, in three parts
 
 1. **Remove.** After the last package install that can pull a driver package, delete the
-   host-coupled user-space: `libnvidia-*.so*`, `libcuda*.so*`, `libnvcuvid*`, `libnvoptix*`,
-   `libGLX/EGL/GLES*_nvidia*`, the `nvidia`/`vdpau` trees and the xorg driver — **including the
-   versioned files**, because the CDI `create-symlinks` hook re-creates every SONAME link from
-   whatever versioned file it finds. Delete the whole `nvidia*` binary set too: `nvidia-smi`,
+   host-coupled user-space: `libnvidia-*.so*`, `libcuda.so*`, `libcudadebugger.so*`,
+   `libnvcuvid*`, `libnvoptix*`, `libGLX/EGL/GLES*_nvidia*`, the `nvidia`/`vdpau` trees and the xorg
+   driver — **including the versioned files**, because the CDI `create-symlinks` hook re-creates
+   every SONAME link from whatever versioned file it finds. Delete the whole `nvidia*` binary set
+   too: `nvidia-smi`,
    `nvidia-cuda-mps-*`, `nvidia-debugdump`, `nvidia-persistenced`, `nvidia-xconfig`, `nvidia-ctk` and
    the `nvidia-container-*` wrappers are all injected or host-only.
+
+   The pattern is **anchored, never a prefix glob**. `libcuda*.so*` also spans `libcudart*` and
+   `libcudadevrt*` — the CUDA runtime and the virtual-device runtime, which the toolkit layer
+   installs and must keep — so a prefix glob deletes the libraries the image is built around
+   (opencharly/layer-cuda#23). `libcudadebugger.so*` is driver user-space that does not carry the
+   `libcuda.so` stem (the CDI spec injects it), so it is listed explicitly.
 2. **Prove it at build time.** The assertion must be a `run:` step, not a `check:`. A build container
    has no injection, so any match there is unambiguously image content; a check may run in a
    GPU-attached container where the host's identical libraries sit at the same paths and only
