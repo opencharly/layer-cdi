@@ -66,7 +66,20 @@ cdi:
             # then ran on an image whose composition deletes that binary. A pod must bake no driver
             # layer at all (opencharly/layer-cdi#9). The `drv=` twin is unchanged by the bump, so
             # the pin moves with the contract and the assertion below still names it exactly.
-            - '@github.com/opencharly/layer-cuda:v2026.323.0252'
+            #
+            # v2026.323.1604 (layer-cuda#28) keeps that same `drv=` and makes the strip
+            # LAYOUT-SCOPED. Its `libs=` — the single definition the whole step reads — became
+            # `/usr/lib /usr/lib32 /usr/lib64`, and the `nvidia`/`vdpau` tree removals AND the xorg
+            # driver are now derived from that one list instead of from a hard-coded `/usr/lib`.
+            # Measured on this host: `/usr/lib64` is a symlink to `lib` (both names give inode
+            # 32:143773) but `/usr/lib32` is a REAL multilib directory that carries
+            # `vdpau/libvdpau_nvidia.so.615.78.08`, so the previous single-tree removal reported
+            # success over a tree it never walked. The assertion below moves with the producer in
+            # this same cutover (opencharly/layer-cdi#12): it derives its libraries, its trees and
+            # its xorg driver from that ONE layout list, and the producer's own residue assertion
+            # walks the same three layouts — so the two sides finally describe ONE set, and the
+            # multi-layout reds are no longer false reds this assertion must refuse to report.
+            - '@github.com/opencharly/layer-cuda:v2026.323.1604'
         plan:
             # ---------------------------------------------------------------- the removal
             # NOT here. The strip lives in `layer-cuda`, because `layer-cuda` is what installs
@@ -92,9 +105,9 @@ cdi:
               run_as: root
               command: |
                 set -eu
-                # The directories are overridable so the assertion can be EXECUTED against fixtures
+                # The LAYOUT LIST is overridable so the assertion can be EXECUTED against fixtures
                 # (and so a bed can prove it discriminates) without a GPU or an image build. The
-                # default is the image's own layout.
+                # default is the image's own layout, and ONE variable carries all three surfaces.
                 # THREE surfaces, because the removal touches three: the top-level libraries, the
                 # driver TREES the packages ship (nvidia/, vdpau/ — where libvdpau_nvidia.so lives),
                 # and the xorg driver. An assertion that only counts the first surface passes on an
@@ -127,25 +140,27 @@ cdi:
                 # image build red (opencharly/layer-cdi#6).
                 #
                 # `libvdpau_nvidia.so*` is the ONE driver library the producer covers by a TREE
-                # rather than by a pattern (`rm -rf /usr/lib/vdpau`), so this step counts it in
-                # BOTH shapes — the explicit pattern below (a copy that escaped the tree) and the
-                # vdpau tree the loop counts wholesale. Dropping it, as this PR's first round did,
-                # was a weakening: the tree loop alone would stop seeing a top-level copy. Its
-                # home on every layout measured is the tree (`/usr/lib/vdpau/libvdpau_nvidia.so`,
-                # `.so.1`, `.so.615.78.08`, and `/usr/lib64` is a symlink to `lib` on CachyOS —
+                # rather than by a pattern (`rm -rf "$d/vdpau"`, once per layout), so this step
+                # counts it in BOTH shapes — the explicit pattern below (a copy that escaped the
+                # tree) and the vdpau tree the loop counts wholesale. Dropping it, as an earlier
+                # round did, was a weakening: the tree loop alone would stop seeing a top-level
+                # copy. Its home on every layout measured is the tree
+                # (`/usr/lib/vdpau/libvdpau_nvidia.so`, `.so.1`, `.so.615.78.08`, and
+                # `/usr/lib64` is a symlink to `lib` on CachyOS —
                 # measured, `stat` gives both paths inode 32:143773 — so the two names are one
                 # directory), and the top-level name cannot false-red: `/usr/lib{,64}/libvdpau.so*`
                 # is Mesa's shim, a DIFFERENT name. It sits outside the `drv=` twin because the
                 # producer does not match it by name at top level, not because it is not driver
                 # user-space.
                 #
-                # What this step does NOT count, and why: the producer's `rm -rf` names
-                # `/usr/lib/vdpau` only. A distro whose `/usr/lib64` is a real directory would
-                # leave `/usr/lib64/vdpau` behind, and this host additionally carries
-                # `/usr/lib32/vdpau` (measured; no image measured here ships it). Counting those
-                # here would red a build the producer cannot make correct — the same false-red
-                # class this PR fixes — so they are filed against the producer instead:
-                # opencharly/layer-cuda#28.
+                # WHICH LAYOUTS this step counts: all three of `/usr/lib`, `/usr/lib32` and
+                # `/usr/lib64`, because that is the set the producer strips since
+                # v2026.323.1604 (opencharly/layer-cuda#28). Before that release the producer's
+                # `rm -rf` named `/usr/lib/vdpau` alone, so counting `/usr/lib64/vdpau` here
+                # would have redded a build the producer could not make correct — a false red,
+                # the class opencharly/layer-cdi#6 fixed — and this step deliberately counted
+                # LESS than the layout axis and said so. The producer moved first; this
+                # assertion follows it in the same cutover, and the two now describe ONE set.
                 #
                 # `set -f` is load-bearing. $drv and $vdpau are expanded UNQUOTED — that is how
                 # the -o chains are spliced into the find(1) expression — and without it the shell
@@ -159,22 +174,42 @@ cdi:
                 -o -name libEGL_nvidia.so* -o -name libGLESv1_CM_nvidia.so* \
                 -o -name libGLESv2_nvidia.so*"
                 vdpau="-name libvdpau_nvidia.so*"
-                libs=${CDI_LIB_DIRS:-/usr/lib /usr/lib64}
-                trees=${CDI_TREE_DIRS:-/usr/lib/nvidia /usr/lib64/nvidia /usr/lib/vdpau}
-                xorg=${CDI_XORG_DRIVER:-/usr/lib/xorg/modules/drivers/nvidia_drv.so}
+                # ── ONE LAYOUT DEFINITION, THE PRODUCER'S ────────────────────────────────
+                # `cuda-drop-driver-userspace` derives the library scan, the nvidia/vdpau tree
+                # removals AND the xorg removal from a SINGLE `libs=` list. This step derives
+                # the same three surfaces from the same single list, so the assertion cannot
+                # describe a set the producer does not strip — the contract the `drv=` twin
+                # above already holds for the pattern set.
+                #
+                # It is ONE variable for the fixture too. Pointing `CDI_LIB_DIRS` at a planted
+                # root moves the libraries, the trees and the xorg driver together, exactly as
+                # the producer's `CUDA_STRIP_LIB_DIRS` does, so a fixture that plants
+                # `<root>/lib32/vdpau` is exercised by the SAME code path an image runs.
+                layouts=${CDI_LIB_DIRS:-/usr/lib /usr/lib32 /usr/lib64}
                 left=0
-                for d in $libs; do
+                # SURFACE 1 — the top-level libraries. `find` does not descend a symlinked start
+                # point, so a layout that is a second NAME for one already walked (/usr/lib64 ->
+                # lib on Arch/CachyOS, measured) contributes nothing here; the tree loop below
+                # skips it explicitly for the same one-inode-once reason.
+                for d in $layouts; do
                   [ -d "$d" ] || continue
                   n=$(find "$d" -maxdepth 1 \( -type f -o -type l \) \( $drv -o $vdpau \) 2>/dev/null | wc -l)
                   left=$((left + n))
                 done
-                for d in $trees; do
-                  [ -d "$d" ] || continue
-                  n=$(find "$d" \( -type f -o -type l \) 2>/dev/null | wc -l)
-                  left=$((left + n))
+                # SURFACES 2 AND 3 — the nvidia/vdpau trees and the xorg driver, per layout,
+                # derived from the ONE list above rather than listed a second time.
+                for d in $layouts; do
+                  if [ ! -d "$d" ] || [ -L "$d" ]; then continue; fi
+                  for t in nvidia vdpau; do
+                    if [ ! -d "$d/$t" ]; then continue; fi
+                    n=$(find "$d/$t" \( -type f -o -type l \) 2>/dev/null | wc -l)
+                    left=$((left + n))
+                  done
+                  if [ -e "$d/xorg/modules/drivers/nvidia_drv.so" ] || [ -L "$d/xorg/modules/drivers/nvidia_drv.so" ]; then
+                    left=$((left + 1))
+                  fi
                 done
-                if [ -e "$xorg" ] || [ -L "$xorg" ]; then left=$((left + 1)); fi
-                echo "cdi: driver libraries still baked: $left"
+                echo "cdi: driver libraries still baked: $left (layouts: $layouts)"
                 test "$left" -eq 0
 
             - run: no host-coupled nvidia binary is baked — the injection is the only provider
