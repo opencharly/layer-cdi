@@ -54,7 +54,15 @@ cdi:
             # layer cannot assert a coherent image against that pin. v2026.323.0138 (layer-cuda#26)
             # carries the same `drv=` and extends the producer's survival assertion to the
             # toolkit's static archives — pin and assertion move together (opencharly/layer-cdi#6).
-            - '@github.com/opencharly/layer-cuda:v2026.323.0138'
+            #
+            # v2026.323.0252 (layer-cuda#30) keeps that same `drv=` and DROPS
+            # `require: layer-nvidia`. That matters HERE and not only in the toolkit: a `require:`
+            # is target-blind, so naming the older release made every POD that composes this layer
+            # also compose the VM driver user-space, and `layer-nvidia`'s `nvidia-ctk` assertions
+            # then ran on an image whose composition deletes that binary. A pod must bake no driver
+            # layer at all (opencharly/layer-cdi#9). The `drv=` twin is unchanged by the bump, so
+            # the pin moves with the contract and the assertion below still names it exactly.
+            - '@github.com/opencharly/layer-cuda:v2026.323.0252'
         plan:
             # ---------------------------------------------------------------- the removal
             # NOT here. The strip lives in `layer-cuda`, because `layer-cuda` is what installs
