@@ -261,7 +261,7 @@ cdi-skill:
             the ICD JSONs that name SONAMEs rather than versions, and the probe that proves a
             container resolved the INJECTED host driver at the running kernel module's version.
             MUST be invoked before composing or debugging any GPU image (nvidia, cuda, ollama,
-            comfyui, immich-ml, jupyter-ml, python-ml, versa, unsloth-studio).
+            comfyui, immich, jupyter-ml, python-ml, versa, unsloth-studio).
         triggers:
             - "CDI / nvidia.com/gpu / `--device nvidia.com/gpu=all` / a GPU image whose driver libraries must come from the host"
             - "nvidia-smi reports Driver/library version mismatch / inference runs on CPU on a GPU host / VRAM estimate is empty"
