@@ -57,7 +57,11 @@ cdi:
             # driver libraries survive and a red there is a different, TRUE reason
             # (opencharly/layer-cdi#8). v2026.323.0138 (layer-cuda#26) carries the same `drv=`
             # and extends the producer's survival assertion to the toolkit's static archives —
-            # pin and assertion move together (opencharly/layer-cdi#6).
+            # pin and assertion move together (opencharly/layer-cdi#6). v2026.326.0028
+            # (layer-cuda#35) is the release that carries the producer's EXECUTABLE fixture for
+            # that predicate; `tests/no-baked-driver.sh` here is the consumer-side twin — it
+            # executes BOTH assertions below against a clean and a planted layout, so a
+            # predicate that stops seeing a surface reds in this repo's own gate.
             #
             # v2026.323.0252 (layer-cuda#30) keeps that same `drv=` and DROPS
             # `require: layer-nvidia`. That matters HERE and not only in the toolkit: a `require:`
@@ -79,7 +83,7 @@ cdi:
             # its xorg driver from that ONE layout list, and the producer's own residue assertion
             # walks the same three layouts — so the two sides finally describe ONE set, and the
             # multi-layout reds are no longer false reds this assertion must refuse to report.
-            - '@github.com/opencharly/layer-cuda:v2026.323.1604'
+            - '@github.com/opencharly/layer-cuda:v2026.326.0028'
         plan:
             # ---------------------------------------------------------------- the removal
             # NOT here. The strip lives in `layer-cuda`, because `layer-cuda` is what installs
