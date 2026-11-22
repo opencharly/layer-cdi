@@ -5,7 +5,7 @@ description: |-
   the ICD JSONs that name SONAMEs rather than versions, and the probe that proves a
   container resolved the INJECTED host driver at the running kernel module's version.
   MUST be invoked before composing or debugging any GPU image (nvidia, cuda, ollama,
-  comfyui, immich-ml, jupyter-ml, python-ml, versa, unsloth-studio).
+  comfyui, immich, jupyter-ml, python-ml, versa, unsloth-studio).
 family: distros
 ---
 
