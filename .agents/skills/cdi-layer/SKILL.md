@@ -60,6 +60,6 @@ is the layer that pulls the driver user-space in and therefore the one that clea
 
 - **A pod with a CDI device must not use `userns=keep-id`.** The injection fails with
   `mount_setattr … EPERM` because an idmapped mount needs `CAP_SYS_ADMIN` in the user namespace that
-  owns the filesystem's superblock; with `userns=host` no idmap is requested. `/charly-cdi:cdi`
+  owns the filesystem's superblock; with `userns=host` no idmap is requested. `/charly-distros:cdi`
   carries the measurement and the two legal shapes (bind → `userns=host` + container-root workload;
   named volume → `keep-id` is fine).
