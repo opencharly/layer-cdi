@@ -74,12 +74,24 @@ if [ "${1:-}" = "--self-test" ]; then
     exit 0
 fi
 
-producer="${LAYER_CUDA_DIR:-}"
-if [ -z "$producer" ] || [ ! -f "$producer/charly.yml" ]; then
+# Producer resolution. An EXPLICIT LAYER_CUDA_DIR is honoured and never falls back to sibling
+# auto-detect — that is what makes the self-test's absent-producer arm hermetic in a working set
+# that DOES have a sibling `layer-cuda` (the umbrella), where a fallback would silently turn the
+# SKIP arm into a live comparison (opencharly/layer-cdi#18, round-1 block 1).
+explicit=0
+if [ "${LAYER_CUDA_DIR+x}" = x ]; then
+    explicit=1
+    producer="${LAYER_CUDA_DIR}"
+else
     producer=""
     for cand in "$here/../layer-cuda" "$here/../../layer-cuda"; do
         [ -f "$cand/charly.yml" ] && producer=$cand && break
     done
+fi
+if [ "$explicit" = 1 ] && [ ! -f "$producer/charly.yml" ]; then
+    echo "SKIP: LAYER_CUDA_DIR='$producer' is not a layer-cuda checkout (no charly.yml) — no fallback to a sibling by design"
+    echo "SKIP: this control runs where BOTH trees exist — an image build context holds this repo only"
+    exit 0
 fi
 if [ -z "$producer" ]; then
     echo "SKIP: no producer checkout to compare against (set LAYER_CUDA_DIR=<layer-cuda checkout>)"
