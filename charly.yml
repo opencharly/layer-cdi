@@ -104,6 +104,21 @@ cdi:
             # A `run:` rather than a `check:` for two reasons that agree: a candy must carry at least
             # one install-bearing step to be composable at all, and the assertion BELONGS at build
             # time, where it can neither be skipped nor see an injection.
+            # THE DRIFT CONTROL FOR THE DUPLICATED `drv=` PREDICATE (opencharly/layer-cuda#34,
+            # item 3). The predicate below is a byte-identical copy of `layer-cuda`'s strip on
+            # purpose — a build context cannot reach into another repo's plan — and the source
+            # comments have always promised that "`diff` of the two blocks is the drift control".
+            # This step runs that control: its SELF-TEST first (three arms: identical passes, a
+            # one-token drift fails naming DRIFT, an absent producer SKIPs visibly), then the live
+            # comparison, which finds a sibling `layer-cuda` checkout only where BOTH trees are
+            # materialized (the umbrella working set). In an image build there is no sibling, so
+            # the live half prints its SKIP lines — visible, never a silent pass.
+            - check: the duplicated `drv=` predicate still matches its producer, and the control discriminates
+              id: cdi-predicate-drift
+              command: |
+                set -eu
+                bash tests/predicate-drift.sh --self-test
+                bash tests/predicate-drift.sh
             - run: no host-coupled driver library is baked — the injection is the only provider
               id: cdi-no-baked-driver-libs
               run_as: root
