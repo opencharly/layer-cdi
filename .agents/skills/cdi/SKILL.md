@@ -130,6 +130,13 @@ mounts):
    service → `nvidia-smi` resolves the injected driver), so the workload needs NO capability at all.
    (`#Security` in `spec/schema` cannot yet express `cap_drop` — opencharly/spec#398 — so a pod
    declares `security_opt: [no-new-privileges]` and drops the rest once the field exists.)
+   Measured on this shape (podman 6.2.0, crun 1.31, `/etc/subuid` = `atrawog:100000:65536`):
+   `--user 0` writes as host uid 1000; `--user <image uid>` writes as a subordinate uid (100999
+   for 1000) and cannot write a user-owned directory at all — which is why the workload user
+   cannot change. Container root's `HOME` is `/root`, while every volume is mounted under the
+   image home, so the quadlet generator pins `HOME` to `ai.opencharly.home` in exactly this
+   branch; with it every HOME-derived path — including the XDG base directories, which the spec
+   derives from `HOME` — resolves under the image user's home instead of `/root`.
 2. **A named volume** → `--userns=keep-id` is fine (podman chowns the volume to the container user),
    because there is no host-owned bind for the mapping to protect.
 
