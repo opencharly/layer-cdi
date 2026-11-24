@@ -134,9 +134,10 @@ mounts):
    `--user 0` writes as host uid 1000; `--user <image uid>` writes as a subordinate uid (100999
    for 1000) and cannot write a user-owned directory at all — which is why the workload user
    cannot change. Container root's `HOME` is `/root`, while every volume is mounted under the
-   image home, so the quadlet generator pins `HOME` to `ai.opencharly.home` in exactly this
-   branch; with it every HOME-derived path — including the XDG base directories, which the spec
-   derives from `HOME` — resolves under the image user's home instead of `/root`.
+   image home, so a deploy in this shape must set `HOME` to the image home in its env. Measured
+   without it, python, node and huggingface_hub all resolve under `/root`
+   (`HF_HOME=/root/.cache/huggingface`); with `HOME=/home/user` they resolve under the image
+   user's home, and the XDG base directories — HOME-derived by specification — follow it.
 2. **A named volume** → `--userns=keep-id` is fine (podman chowns the volume to the container user),
    because there is no host-owned bind for the mapping to protect.
 
