@@ -130,6 +130,16 @@ mounts):
    service → `nvidia-smi` resolves the injected driver), so the workload needs NO capability at all.
    (`#Security` in `spec/schema` cannot yet express `cap_drop` — opencharly/spec#398 — so a pod
    declares `security_opt: [no-new-privileges]` and drops the rest once the field exists.)
+   Measured on this shape (podman 6.2.0, crun 1.31, `/etc/subuid` = `atrawog:100000:65536`):
+   `--user 0` writes as host uid 1000; `--user <image uid>` writes as a subordinate uid (100999
+   for 1000), and that uid is admitted ONLY by a world-writable directory — measured: it wrote
+   into a `0777` directory as host uid 100999, and its touch on a user-owned `0755`/`0700`
+   directory was refused. A host-owned volume (a bind, or a gocryptfs `0700` plaintext mount) is
+   therefore not writable by the image user, which is why the workload user cannot change. Container root's `HOME` is `/root`, while every volume is mounted under the
+   image home, so a deploy in this shape must set `HOME` to the image home in its env. Measured
+   without it, python, node and huggingface_hub all resolve under `/root`
+   (`HF_HOME=/root/.cache/huggingface`); with `HOME=/home/user` they resolve under the image
+   user's home, and the XDG base directories — HOME-derived by specification — follow it.
 2. **A named volume** → `--userns=keep-id` is fine (podman chowns the volume to the container user),
    because there is no host-owned bind for the mapping to protect.
 
