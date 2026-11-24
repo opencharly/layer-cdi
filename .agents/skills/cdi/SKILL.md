@@ -133,19 +133,17 @@ shape this org forbids (D-HW-10): **no charly pod runs as container root**, and 
    `hostPath` values. They are versioned host files: never bake them into an image (the ICD/SONAME
    resolution would pick the image's copy and report a driver/library version mismatch).
 
-Measured in that shape: `cuInit=0`, **RTX 4080 SUPER**, a context and a 16 MiB allocation,
-`nvidia-smi -L` lists the GPU, ONNX Runtime profiles `MatMul` on `CUDAExecutionProvider`, and the
-workload is `user`/uid 1000.
+Measured in that shape: `cuInit=0`, device `NVIDIA GeForce RTX 4080 SUPER`, `cuCtxCreate=0`, a
+16 MiB `cuMemAlloc` returning a pointer, ONNX Runtime profiling `MatMul` on
+`CUDAExecutionProvider`, and the workload `user`/uid 1000.
 
 What does **not** work, measured: `--userns=host --user <image uid>` with an idmapped volume
 (`-v src:dst:idmap` and `--mount …,idmap` both denied — idmap is a no-op under `userns=host`); any CDI
 spec carrying mounts under keep-id (EPERM); and pre-creating the mount targets in the image (EPERM
 identically).
 
-`sdk/deploykit/quadlet.go` emits the user-namespace and `AddDevice` halves exactly as above and never
-a root userns; `plugin-deploy-pod` derives the devices-only spec and adds the library binds. A deploy
-never sets `HOME` to compensate for a root workload — the image user's home is already correct
-(`/charly-internals:xdg`).
+A deploy never sets `HOME` to compensate for a root workload — the image user's home is already
+correct (`/charly-internals:xdg`).
 
 ## What the image legitimately owns
 
