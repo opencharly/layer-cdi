@@ -33,76 +33,26 @@ cdi:
               3. PROVES, at check time, that the container actually resolved the INJECTED driver and
                  that its version equals the running kernel module's.
 
-            What this layer deliberately does NOT remove: the Vulkan/OpenCL ICD JSONs. They name a
+            What this layer deliberately does NOT remove: the Vulkan/OpenCL ICD files. They name a
             SONAME (`libGLX_nvidia.so.0`), not a version, so the link the injection creates
             satisfies them — which is why they are part of the contract rather than a violation of
             it.
-        require:
-            # THE ORDER IS THE CONTRACT. This layer's assertions must run AFTER every layer that
-            # can install host-coupled driver user-space, and `cuda` is today that layer (measured:
-            # `pacman -S cuda` pulls `opencl-nvidia`'s three driver files, NOT `nvidia-utils`).
-            # Measured: with no requirement, the ordering put this layer BEFORE cuda and its
-            # assertion reported
-            #   cdi: driver libraries still baked: 138
-            # on a box that composes both — a true reading of a half-built image, and exactly the
-            # class of noise that makes a gate ignorable. Requiring the toolkit makes the order a
-            # property of the graph instead of a property of how a box happens to list its candies.
-            #
-            # SO: before this `require:` can be dropped (the toolkit is opt-in per consumer class —
-            # see the `cdi` skill), the ORDER must be replaced by an explicit box rule that lists
-            # `layer-cuda` BEFORE `layer-cdi`, with the fixture test and a bed proving the guard
-            # still sees the final image. Do not drop the edge on its own.
-            #
-            # A CPU-only image does not compose this layer at all: the CDI contract is about how a
-            # container gets a GPU driver, so an image with no CUDA toolkit has nothing to assert.
-            #
-            # The tag is not decoration: it names the release whose `cuda-drop-driver-userspace`
-            # holds the `drv=` predicate that `cdi-no-baked-driver-libs` below duplicates. The
-            # anchored strip landed at v2026.323.0124 (layer-cuda#24) — the FIRST release whose
-            # strip this assertion can twin. The historical half is narrower than it reads: of
-            # the 18 `layer-cuda` releases before .0124, exactly ONE — v2026.321.1520 — carries
-            # a `libcuda*` strip, and it is the over-broad prefix glob `libcuda*.so*` that
-            # deletes the CUDA runtime; the other 17 carry no `libcuda*` strip at all, so their
-            # driver libraries survive and a red there is a different, TRUE reason
-            # (opencharly/layer-cdi#8). v2026.323.0138 (layer-cuda#26) carries the same `drv=`
-            # and extends the producer's survival assertion to the toolkit's static archives —
-            # pin and assertion move together (opencharly/layer-cdi#6). v2026.326.0028
-            # (layer-cuda#35) is the release that carries the producer's EXECUTABLE fixture for
-            # that predicate; `tests/no-baked-driver.sh` here is the consumer-side twin — it
-            # executes BOTH assertions below against a clean and a planted layout, so a
-            # predicate that stops seeing a surface reds in this repo's own gate.
-            #
-            # v2026.323.0252 (layer-cuda#30) keeps that same `drv=` and DROPS
-            # `require: layer-nvidia`. That matters HERE and not only in the toolkit: a `require:`
-            # is target-blind, so naming the older release made every POD that composes this layer
-            # also compose the VM driver user-space, and `layer-nvidia`'s `nvidia-ctk` assertions
-            # then ran on an image whose composition deletes that binary. A pod must bake no driver
-            # layer at all (opencharly/layer-cdi#9). The `drv=` twin is unchanged by the bump, so
-            # the pin moves with the contract and the assertion below still names it exactly.
-            #
-            # v2026.323.1604 (layer-cuda#28) keeps that same `drv=` and makes the strip
-            # LAYOUT-SCOPED. Its `libs=` — the single definition the whole step reads — became
-            # `/usr/lib /usr/lib32 /usr/lib64`, and the `nvidia`/`vdpau` tree removals AND the xorg
-            # driver are now derived from that one list instead of from a hard-coded `/usr/lib`.
-            # Measured on this host: `/usr/lib64` is a symlink to `lib` (both names give inode
-            # 32:143773) but `/usr/lib32` is a REAL multilib directory that carries
-            # `vdpau/libvdpau_nvidia.so.615.78.08`, so the previous single-tree removal reported
-            # success over a tree it never walked. The assertion below moves with the producer in
-            # this same cutover (opencharly/layer-cdi#12): it derives its libraries, its trees and
-            # its xorg driver from that ONE layout list, and the producer's own residue assertion
-            # walks the same three layouts — so the two sides finally describe ONE set, and the
-            # multi-layout reds are no longer false reds this assertion must refuse to report.
-            - '@github.com/opencharly/layer-cuda:v2026.326.0028'
+        # No `require:` any more. The toolkit used to pull the driver user-space in, so this layer
+        # required `layer-cuda` to run its assertion AFTER the installer. `layer-cuda` now installs the
+        # toolkit driver-free (opencharly/layer-cuda#39 at v2026.329.1939; the vdpau arm's fix is
+        # opencharly/layer-cuda#42 at v2026.329.2022, the tag the build uses), so nothing installs a driver
+        # file and the ordering is no longer load-bearing; the assertion below remains the build-time
+        # proof.
         plan:
-            # ---------------------------------------------------------------- the removal
-            # NOT here. The strip lives in `layer-cuda`, because `layer-cuda` is what installs
-            # `cuda` — and on the pac path `cuda` DEPENDS on `nvidia-utils`, so the toolkit layer is
-            # the one that pulls the driver user-space in and the one that must clean up after
-            # itself. Keeping the removal in exactly one place is the rule; this layer's job is to
-            # PROVE the result, which is the half that was missing.
+            # ---------------------------------------------------------------- no removal exists
+            # `layer-cuda` no longer strips: it installs the toolkit DRIVER-FREE at the source
+            # (opencharly/layer-cuda#39, `--assume-installed opencl-nvidia`), so nothing installs a
+            # driver file and this layer has nothing to clean up after. Its job is to PROVE the
+            # result at build time — and to ship the OpenCL ICD file the vendored package used to
+            # provide.
             #
-            # What a consumer must do: compose `layer-cuda` (which strips) and this layer (which
-            # asserts and probes), and name the image with a `-cdi` suffix.
+            # What a consumer must do: compose `layer-cuda` when its class needs the toolkit, this
+            # layer for the contract, and name the image with a `-cdi` suffix.
             # ---------------------------------------------------------------- the build-time proof
             # A `run:` executes in the build container, where no CDI has injected anything, so a
             # match here is unambiguously IMAGE content. A `check:` step may run in a GPU-attached
@@ -113,21 +63,18 @@ cdi:
             # A `run:` rather than a `check:` for two reasons that agree: a candy must carry at least
             # one install-bearing step to be composable at all, and the assertion BELONGS at build
             # time, where it can neither be skipped nor see an injection.
-            # THE DRIFT CONTROL FOR THE DUPLICATED `drv=` PREDICATE (opencharly/layer-cuda#34,
-            # item 3). The predicate below is a byte-identical copy of `layer-cuda`'s strip on
-            # purpose — a build context cannot reach into another repo's plan — and the source
-            # comments have always promised that "`diff` of the two blocks is the drift control".
-            # This step runs that control: its SELF-TEST first (three arms: identical passes, a
-            # one-token drift fails naming DRIFT, an absent producer SKIPs visibly), then the live
-            # comparison, which finds a sibling `layer-cuda` checkout only where BOTH trees are
-            # materialized (the umbrella working set). In an image build there is no sibling, so
-            # the live half prints its SKIP lines — visible, never a silent pass.
-            - check: the duplicated `drv=` predicate still matches its producer, and the control discriminates
-              id: cdi-predicate-drift
+            - run: provide the OpenCL ICD file the toolkit's vendored driver no longer ships
+              id: cdi-opencl-icd
+              run_as: root
               command: |
-                set -eu
-                bash tests/predicate-drift.sh --self-test
-                bash tests/predicate-drift.sh
+                install -d /etc/OpenCL/vendors
+                printf 'libnvidia-opencl.so.1\n' > /etc/OpenCL/vendors/nvidia.icd
+                echo "cdi: OpenCL ICD file written (it names the injected SONAME)"
+            - run: the OpenCL ICD file names the injected SONAME
+              id: cdi-opencl-icd-names-soname
+              run_as: root
+              command: |
+                grep -qx 'libnvidia-opencl.so.1' /etc/OpenCL/vendors/nvidia.icd
             - run: no host-coupled driver library is baked — the injection is the only provider
               id: cdi-no-baked-driver-libs
               run_as: root
@@ -136,24 +83,17 @@ cdi:
                 # The LAYOUT LIST is overridable so the assertion can be EXECUTED against fixtures
                 # (and so a bed can prove it discriminates) without a GPU or an image build. The
                 # default is the image's own layout, and ONE variable carries all three surfaces.
-                # THREE surfaces, because the removal touches three: the top-level libraries, the
+                # THREE surfaces, because the assertion touches three: the top-level libraries, the
                 # driver TREES the packages ship (nvidia/, vdpau/ — where libvdpau_nvidia.so lives),
                 # and the xorg driver. An assertion that only counts the first surface passes on an
                 # image whose vdpau/xorg driver content survived, which is exactly what the deleted
                 # strip's `rm -rf` lines existed to remove.
-                # ── THE LIBRARY PREDICATE IS THE TWIN OF `layer-cuda`'s STRIP ────────────
-                # The ONE definition of "driver user-space" lives in opencharly/layer-cuda, in
-                # the `drv=` variable of its `cuda-drop-driver-userspace` step — read at tag
-                # `v2026.323.0138` (its `origin/main`, commit 1514520), and byte-identical at
-                # `v2026.323.0124`, the release that landed the anchored strip. THIS list must
-                # hold exactly that set: what the producer promises to REMOVE is what this
-                # consumer is entitled to see absent. They CANNOT be shared — each is a shell
-                # fragment inside a different repo's `charly.yml` plan step, and neither repo has
-                # an include that reaches into the other's plan — so the duplication is deliberate
-                # and BOTH sides name each other. The `drv=` line below is byte-identical to the
-                # producer's on purpose, so `diff` of the two blocks is the drift control; change
-                # one and change the other in the same cutover, and move the `require:` tag at
-                # the top of this candy with them.
+                # ── THE LIBRARY PREDICATE IS THE ONE DEFINITION OF "driver user-space" ─────
+                # The producer (`layer-cuda`) no longer strips: its install is driver-free at the
+                # source (opencharly/layer-cuda#39), so the producer's twin predicate and this
+                # layer's drift control are gone with it. THIS list is the single statement
+                # of the set — the driver user-space a CDI-injected image must never bake — and
+                # nothing installs one any more.
                 #
                 # A PREFIX glob cannot say this set. `libcuda*.so*` — what this step used to use,
                 # the same over-broad pattern layer-cuda#23 fixed in the strip — spans four
@@ -182,13 +122,9 @@ cdi:
                 # user-space.
                 #
                 # WHICH LAYOUTS this step counts: all three of `/usr/lib`, `/usr/lib32` and
-                # `/usr/lib64`, because that is the set the producer strips since
-                # v2026.323.1604 (opencharly/layer-cuda#28). Before that release the producer's
-                # `rm -rf` named `/usr/lib/vdpau` alone, so counting `/usr/lib64/vdpau` here
-                # would have redded a build the producer could not make correct — a false red,
-                # the class opencharly/layer-cdi#6 fixed — and this step deliberately counted
-                # LESS than the layout axis and said so. The producer moved first; this
-                # assertion follows it in the same cutover, and the two now describe ONE set.
+                # `/usr/lib64`. A single hard-coded `/usr/lib` walk missed `/usr/lib32/vdpau` on a
+                # multilib host (opencharly/layer-cuda#28, opencharly/layer-cdi#12), so the layout
+                # axis is ONE list and all three surfaces derive from it.
                 #
                 # `set -f` is load-bearing. $drv and $vdpau are expanded UNQUOTED — that is how
                 # the -o chains are spliced into the find(1) expression — and without it the shell
@@ -202,12 +138,9 @@ cdi:
                 -o -name libEGL_nvidia.so* -o -name libGLESv1_CM_nvidia.so* \
                 -o -name libGLESv2_nvidia.so*"
                 vdpau="-name libvdpau_nvidia.so*"
-                # ── ONE LAYOUT DEFINITION, THE PRODUCER'S ────────────────────────────────
-                # `cuda-drop-driver-userspace` derives the library scan, the nvidia/vdpau tree
-                # removals AND the xorg removal from a SINGLE `libs=` list. This step derives
-                # the same three surfaces from the same single list, so the assertion cannot
-                # describe a set the producer does not strip — the contract the `drv=` twin
-                # above already holds for the pattern set.
+                # ── ONE LAYOUT DEFINITION ────────────────────────────────────────────────
+                # This step derives the library scan, the nvidia/vdpau tree checks AND the xorg
+                # check from a SINGLE `layouts=` list, so the three surfaces cannot drift apart.
                 #
                 # It is ONE variable for the fixture too. Pointing `CDI_LIB_DIRS` at a planted
                 # root moves the libraries, the trees and the xorg driver together, exactly as
@@ -228,11 +161,17 @@ cdi:
                 # derived from the ONE list above rather than listed a second time.
                 for d in $layouts; do
                   if [ ! -d "$d" ] || [ -L "$d" ]; then continue; fi
-                  for t in nvidia vdpau; do
-                    if [ ! -d "$d/$t" ]; then continue; fi
-                    n=$(find "$d/$t" \( -type f -o -type l \) 2>/dev/null | wc -l)
+                  # The `nvidia` tree exists ONLY from the driver package; a plain `vdpau` tree
+                  # does not -- the generic libvdpau (pulled by ffmpeg) ships
+                  # `/usr/lib/vdpau/libvdpau_trace.so`, so only the DRIVER file counts there.
+                  if [ -d "$d/nvidia" ]; then
+                    n=$(find "$d/nvidia" \( -type f -o -type l \) 2>/dev/null | wc -l)
                     left=$((left + n))
-                  done
+                  fi
+                  if [ -d "$d/vdpau" ]; then
+                    n=$(find "$d/vdpau" -maxdepth 1 -name 'libvdpau_nvidia*' 2>/dev/null | wc -l)
+                    left=$((left + n))
+                  fi
                   if [ -e "$d/xorg/modules/drivers/nvidia_drv.so" ] || [ -L "$d/xorg/modules/drivers/nvidia_drv.so" ]; then
                     left=$((left + 1))
                   fi
@@ -296,7 +235,7 @@ cdi-skill:
         owner: cdi
         description: |-
             The CDI runtime contract for GPU images: no baked driver user-space or driver binaries,
-            the ICD JSONs that name SONAMEs rather than versions, and the probe that proves a
+            the ICD files that name SONAMEs rather than versions, and the probe that proves a
             container resolved the INJECTED host driver at the running kernel module's version.
             MUST be invoked before composing or debugging any GPU image (nvidia, cuda, ollama,
             comfyui, immich, jupyter-ml, python-ml, versa, unsloth-studio).
@@ -310,7 +249,7 @@ cdi-layer-skill:
         family: distros
         owner: cdi
         description: |-
-            The `cdi` CANDY itself — what it removes, what it deliberately keeps (the ICD JSONs), the
+            The `cdi` CANDY itself — what it removes, what it deliberately keeps (the ICD files), the
             build-time assertion that cannot be fooled, and the runtime check that catches a shadowed
             injection.
         triggers:
