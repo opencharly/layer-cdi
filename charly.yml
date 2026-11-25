@@ -160,11 +160,17 @@ cdi:
                 # derived from the ONE list above rather than listed a second time.
                 for d in $layouts; do
                   if [ ! -d "$d" ] || [ -L "$d" ]; then continue; fi
-                  for t in nvidia vdpau; do
-                    if [ ! -d "$d/$t" ]; then continue; fi
-                    n=$(find "$d/$t" \( -type f -o -type l \) 2>/dev/null | wc -l)
+                  # The `nvidia` tree exists ONLY from the driver package; a plain `vdpau` tree
+                  # does not -- the generic libvdpau (pulled by ffmpeg) ships
+                  # `/usr/lib/vdpau/libvdpau_trace.so`, so only the DRIVER file counts there.
+                  if [ -d "$d/nvidia" ]; then
+                    n=$(find "$d/nvidia" \( -type f -o -type l \) 2>/dev/null | wc -l)
                     left=$((left + n))
-                  done
+                  fi
+                  if [ -d "$d/vdpau" ]; then
+                    n=$(find "$d/vdpau" -maxdepth 1 -name 'libvdpau_nvidia*' 2>/dev/null | wc -l)
+                    left=$((left + n))
+                  fi
                   if [ -e "$d/xorg/modules/drivers/nvidia_drv.so" ] || [ -L "$d/xorg/modules/drivers/nvidia_drv.so" ]; then
                     left=$((left + 1))
                   fi
