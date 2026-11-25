@@ -23,7 +23,8 @@ cdi:
               1. ENSURES no host-coupled driver user-space or `nvidia*` binary is baked. The
                  target is to install nothing that carries them; `layer-cuda`'s strip is the
                  current TRANSITIONAL enforcement while the toolkit still comes from a distro
-                 package. Measured on Arch/CachyOS: `pacman -S cuda` pulls `opencl-nvidia`
+                 package (opencharly/layer-cuda#39 tracks the driver-free source that retires it).
+                 Measured on Arch/CachyOS: `pacman -S cuda` pulls `opencl-nvidia`
                  (three driver files), NOT `nvidia-utils` — measure the closure per distro
                  rather than assuming it.
               2. PROVES, at build time and again at check time, that none of them remain — including
