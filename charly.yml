@@ -39,7 +39,8 @@ cdi:
             it.
         # No `require:` any more. The toolkit used to pull the driver user-space in, so this layer
         # required `layer-cuda` to run its assertion AFTER the installer. `layer-cuda` now installs the
-        # toolkit driver-free (opencharly/layer-cuda#39, v2026.329.1939), so nothing installs a driver
+        # toolkit driver-free (opencharly/layer-cuda#39 at v2026.329.1939; the vdpau arm's fix is
+        # opencharly/layer-cuda#42 at v2026.329.2022, the tag the build uses), so nothing installs a driver
         # file and the ordering is no longer load-bearing; the assertion below remains the build-time
         # proof.
         plan:
