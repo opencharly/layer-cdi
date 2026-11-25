@@ -1,7 +1,7 @@
 ---
 name: cdi-layer
 description: |-
-  The `cdi` CANDY itself — what it removes, what it deliberately keeps (the ICD JSONs), the
+  The `cdi` CANDY itself — what it removes, what it deliberately keeps (the ICD files), the
   build-time assertion that cannot be fooled, and the runtime check that catches a shadowed
   injection.
 family: distros
@@ -14,7 +14,7 @@ One plan, three parts — the REMOVAL is not here:
 | Step | Kind | Why it lives there |
 |---|---|---|
 | `cdi-opencl-icd` / `cdi-opencl-icd-names-soname` | `run:` (root, build) | Writes `/etc/OpenCL/vendors/nvidia.icd` naming `libnvidia-opencl.so.1` — the file `opencl-nvidia` used to provide — and asserts it carries the injected SONAME. |
-| `cdi-no-baked-driver-libs` / `cdi-no-baked-driver-binaries` | `run:` (root, build) | Asserts no driver surface is baked — files AND links AND versioned files, the `nvidia`/`vdpau` trees, the xorg driver, and the whole `nvidia*` binary set. |
+| `cdi-no-baked-driver-libs` / `cdi-no-baked-driver-binaries` | `run:` (root, build) | Asserts no driver surface is baked — files AND links AND versioned files, the `nvidia` tree, the vdpau DRIVER file (`libvdpau_nvidia*`), the xorg driver, and the whole `nvidia*` binary set. |
 | `cdi-injected-driver-matches-module` | `check:` (`runtime`) | Asserts the container resolved the injected driver and that its version equals `/proc/driver/nvidia/version`. |
 
 The producer installs the toolkit **driver-free** (opencharly/layer-cuda#39), so there is no removal
@@ -43,7 +43,7 @@ candy proves the image bakes none of it.
   `nvidia-pcc`, `nvidia-powerd`, `nvidia-sleep.sh`.
 - **Never move the build-time assertion into a `check:`.** A GPU-attached container makes the
   injected libraries indistinguishable from baked ones at the same paths.
-- **Keep the ICD JSONs.** They name SONAMEs, so the injected links satisfy them; deleting them breaks
+- **Keep the ICD files.** They name SONAMEs, so the injected links satisfy them; deleting them breaks
   Vulkan/OpenCL for no gain.
 - **The runtime probe must stay version-based, not existence-based.** "the file exists" and "CUDA
   device detected" both pass on a shadowed image.

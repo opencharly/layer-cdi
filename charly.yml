@@ -33,7 +33,7 @@ cdi:
               3. PROVES, at check time, that the container actually resolved the INJECTED driver and
                  that its version equals the running kernel module's.
 
-            What this layer deliberately does NOT remove: the Vulkan/OpenCL ICD JSONs. They name a
+            What this layer deliberately does NOT remove: the Vulkan/OpenCL ICD files. They name a
             SONAME (`libGLX_nvidia.so.0`), not a version, so the link the injection creates
             satisfies them — which is why they are part of the contract rather than a violation of
             it.
@@ -47,7 +47,7 @@ cdi:
             # `layer-cuda` no longer strips: it installs the toolkit DRIVER-FREE at the source
             # (opencharly/layer-cuda#39, `--assume-installed opencl-nvidia`), so nothing installs a
             # driver file and this layer has nothing to clean up after. Its job is to PROVE the
-            # result at build time — and to ship the OpenCL ICD JSON the vendored package used to
+            # result at build time — and to ship the OpenCL ICD file the vendored package used to
             # provide.
             #
             # What a consumer must do: compose `layer-cuda` when its class needs the toolkit, this
@@ -62,14 +62,14 @@ cdi:
             # A `run:` rather than a `check:` for two reasons that agree: a candy must carry at least
             # one install-bearing step to be composable at all, and the assertion BELONGS at build
             # time, where it can neither be skipped nor see an injection.
-            - run: provide the OpenCL ICD JSON the toolkit's vendored driver no longer ships
+            - run: provide the OpenCL ICD file the toolkit's vendored driver no longer ships
               id: cdi-opencl-icd
               run_as: root
               command: |
                 install -d /etc/OpenCL/vendors
                 printf 'libnvidia-opencl.so.1\n' > /etc/OpenCL/vendors/nvidia.icd
-                echo "cdi: OpenCL ICD JSON written (it names the injected SONAME)"
-            - run: the OpenCL ICD JSON names the injected SONAME
+                echo "cdi: OpenCL ICD file written (it names the injected SONAME)"
+            - run: the OpenCL ICD file names the injected SONAME
               id: cdi-opencl-icd-names-soname
               run_as: root
               command: |
@@ -234,7 +234,7 @@ cdi-skill:
         owner: cdi
         description: |-
             The CDI runtime contract for GPU images: no baked driver user-space or driver binaries,
-            the ICD JSONs that name SONAMEs rather than versions, and the probe that proves a
+            the ICD files that name SONAMEs rather than versions, and the probe that proves a
             container resolved the INJECTED host driver at the running kernel module's version.
             MUST be invoked before composing or debugging any GPU image (nvidia, cuda, ollama,
             comfyui, immich, jupyter-ml, python-ml, versa, unsloth-studio).
@@ -248,7 +248,7 @@ cdi-layer-skill:
         family: distros
         owner: cdi
         description: |-
-            The `cdi` CANDY itself — what it removes, what it deliberately keeps (the ICD JSONs), the
+            The `cdi` CANDY itself — what it removes, what it deliberately keeps (the ICD files), the
             build-time assertion that cannot be fooled, and the runtime check that catches a shadowed
             injection.
         triggers:
