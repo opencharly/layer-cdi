@@ -20,10 +20,13 @@ cdi:
 
             So this layer does exactly three things, and every GPU image composes it:
 
-              1. REMOVES the host-coupled driver user-space and the `nvidia*` binaries that a
-                 distro package manager installs as a side effect of installing the CUDA toolkit
-                 (`pacman -S cuda` depends on `nvidia-utils`; `dnf install cuda-nvcc` pulls
-                 `nvidia-driver` userspace on some distros).
+              1. ENSURES no host-coupled driver user-space or `nvidia*` binary is baked. The
+                 target is to install nothing that carries them; `layer-cuda`'s strip is the
+                 current TRANSITIONAL enforcement while the toolkit still comes from a distro
+                 package (opencharly/layer-cuda#39 tracks the driver-free source that retires it).
+                 Measured on Arch/CachyOS: `pacman -S cuda` pulls `opencl-nvidia`
+                 (three driver files), NOT `nvidia-utils` — measure the closure per distro
+                 rather than assuming it.
               2. PROVES, at build time and again at check time, that none of them remain — including
                  the versioned files, because the CDI create-symlinks hook re-creates each SONAME
                  link from whatever versioned file it finds.
@@ -36,13 +39,19 @@ cdi:
             it.
         require:
             # THE ORDER IS THE CONTRACT. This layer's assertions must run AFTER every layer that
-            # can install host-coupled driver user-space, and `cuda` is that layer: on the pac path
-            # `pacman -S cuda` DEPENDS on nvidia-utils. Measured: with no requirement, the ordering
-            # put this layer BEFORE cuda and its assertion reported
+            # can install host-coupled driver user-space, and `cuda` is today that layer (measured:
+            # `pacman -S cuda` pulls `opencl-nvidia`'s three driver files, NOT `nvidia-utils`).
+            # Measured: with no requirement, the ordering put this layer BEFORE cuda and its
+            # assertion reported
             #   cdi: driver libraries still baked: 138
             # on a box that composes both — a true reading of a half-built image, and exactly the
             # class of noise that makes a gate ignorable. Requiring the toolkit makes the order a
             # property of the graph instead of a property of how a box happens to list its candies.
+            #
+            # SO: before this `require:` can be dropped (the toolkit is opt-in per consumer class —
+            # see the `cdi` skill), the ORDER must be replaced by an explicit box rule that lists
+            # `layer-cuda` BEFORE `layer-cdi`, with the fixture test and a bed proving the guard
+            # still sees the final image. Do not drop the edge on its own.
             #
             # A CPU-only image does not compose this layer at all: the CDI contract is about how a
             # container gets a GPU driver, so an image with no CUDA toolkit has nothing to assert.
@@ -260,10 +269,24 @@ cdi:
                 set -eu
                 lib=$(ls /usr/lib/libnvidia-ml.so.1 2>/dev/null || true)
                 [ -n "$lib" ] || { echo "cdi: no libnvidia-ml.so.1 — nothing was injected"; exit 1; }
-                uv=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')
+                # ASK THE LIBRARY, NOT `nvidia-smi`. The devices-only spec drops the stock spec's
+                # `mounts`, and `nvidia-smi` is one of the binaries those mounts delivered: measured
+                # absent in every GPU image the org deploys (ollama, strata, whisper, comfyui,
+                # immich, qwen3-tts all have python3; none has nvidia-smi). A probe that needs it
+                # fails for the wrong reason. The buffer is 80 bytes because NVML writes the whole
+                # buffer — passing a char** segfaults (measured, rc 139).
+                uv=$(python3 - <<'PY'
+                import ctypes
+                n = ctypes.CDLL("libnvidia-ml.so.1")
+                assert n.nvmlInit_v2() == 0
+                buf = ctypes.create_string_buffer(80)
+                n.nvmlSystemGetDriverVersion(buf, 80)
+                print(buf.value.decode())
+                PY
+                )
                 km=$(grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' /proc/driver/nvidia/version 2>/dev/null | head -1 || true)
                 echo "cdi: userspace=$uv kernel-module=$km lib=$(readlink -f "$lib")"
-                [ -n "$uv" ] || { echo "cdi: nvidia-smi did not report a driver version"; exit 1; }
+                [ -n "$uv" ] || { echo "cdi: NVML did not report a driver version"; exit 1; }
                 [ "$uv" = "$km" ] || { echo "cdi: DRIVER/LIBRARY MISMATCH — an image library shadows the injected host driver"; exit 1; }
 
 cdi-skill:
