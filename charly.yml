@@ -43,15 +43,15 @@ cdi:
         # file and the ordering is no longer load-bearing; the assertion below remains the build-time
         # proof.
         plan:
-            # ---------------------------------------------------------------- the removal
-            # NOT here. The strip lives in `layer-cuda`, because `layer-cuda` is what installs
-            # `cuda` — and on the pac path `cuda` DEPENDS on `nvidia-utils`, so the toolkit layer is
-            # the one that pulls the driver user-space in and the one that must clean up after
-            # itself. Keeping the removal in exactly one place is the rule; this layer's job is to
-            # PROVE the result, which is the half that was missing.
+            # ---------------------------------------------------------------- no removal exists
+            # `layer-cuda` no longer strips: it installs the toolkit DRIVER-FREE at the source
+            # (opencharly/layer-cuda#39, `--assume-installed opencl-nvidia`), so nothing installs a
+            # driver file and this layer has nothing to clean up after. Its job is to PROVE the
+            # result at build time — and to ship the OpenCL ICD JSON the vendored package used to
+            # provide.
             #
-            # What a consumer must do: compose `layer-cuda` (which strips) and this layer (which
-            # asserts and probes), and name the image with a `-cdi` suffix.
+            # What a consumer must do: compose `layer-cuda` when its class needs the toolkit, this
+            # layer for the contract, and name the image with a `-cdi` suffix.
             # ---------------------------------------------------------------- the build-time proof
             # A `run:` executes in the build container, where no CDI has injected anything, so a
             # match here is unambiguously IMAGE content. A `check:` step may run in a GPU-attached
@@ -82,7 +82,7 @@ cdi:
                 # The LAYOUT LIST is overridable so the assertion can be EXECUTED against fixtures
                 # (and so a bed can prove it discriminates) without a GPU or an image build. The
                 # default is the image's own layout, and ONE variable carries all three surfaces.
-                # THREE surfaces, because the removal touches three: the top-level libraries, the
+                # THREE surfaces, because the assertion touches three: the top-level libraries, the
                 # driver TREES the packages ship (nvidia/, vdpau/ — where libvdpau_nvidia.so lives),
                 # and the xorg driver. An assertion that only counts the first surface passes on an
                 # image whose vdpau/xorg driver content survived, which is exactly what the deleted
@@ -121,13 +121,9 @@ cdi:
                 # user-space.
                 #
                 # WHICH LAYOUTS this step counts: all three of `/usr/lib`, `/usr/lib32` and
-                # `/usr/lib64`, because that is the set the producer strips since
-                # v2026.323.1604 (opencharly/layer-cuda#28). Before that release the producer's
-                # `rm -rf` named `/usr/lib/vdpau` alone, so counting `/usr/lib64/vdpau` here
-                # would have redded a build the producer could not make correct — a false red,
-                # the class opencharly/layer-cdi#6 fixed — and this step deliberately counted
-                # LESS than the layout axis and said so. The producer moved first; this
-                # assertion follows it in the same cutover, and the two now describe ONE set.
+                # `/usr/lib64`. A single hard-coded `/usr/lib` walk missed `/usr/lib32/vdpau` on a
+                # multilib host (opencharly/layer-cuda#28, opencharly/layer-cdi#12), so the layout
+                # axis is ONE list and all three surfaces derive from it.
                 #
                 # `set -f` is load-bearing. $drv and $vdpau are expanded UNQUOTED — that is how
                 # the -o chains are spliced into the find(1) expression — and without it the shell
