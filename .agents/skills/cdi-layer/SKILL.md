@@ -9,10 +9,11 @@ family: distros
 
 # The `cdi` candy
 
-One plan, two parts, in this order — the REMOVAL is not here:
+One plan, three parts — the REMOVAL is not here:
 
 | Step | Kind | Why it lives there |
 |---|---|---|
+| `cdi-opencl-icd` / `cdi-opencl-icd-names-soname` | `run:` (root, build) | Writes `/etc/OpenCL/vendors/nvidia.icd` naming `libnvidia-opencl.so.1` — the file `opencl-nvidia` used to provide — and asserts it carries the injected SONAME. |
 | `cdi-no-baked-driver-libs` / `cdi-no-baked-driver-binaries` | `run:` (root, build) | Asserts no driver surface is baked — files AND links AND versioned files, the `nvidia`/`vdpau` trees, the xorg driver, and the whole `nvidia*` binary set. |
 | `cdi-injected-driver-matches-module` | `check:` (`runtime`) | Asserts the container resolved the injected driver and that its version equals `/proc/driver/nvidia/version`. |
 

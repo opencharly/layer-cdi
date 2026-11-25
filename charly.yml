@@ -63,11 +63,17 @@ cdi:
             # one install-bearing step to be composable at all, and the assertion BELONGS at build
             # time, where it can neither be skipped nor see an injection.
             - run: provide the OpenCL ICD JSON the toolkit's vendored driver no longer ships
+              id: cdi-opencl-icd
               run_as: root
               command: |
                 install -d /etc/OpenCL/vendors
                 printf 'libnvidia-opencl.so.1\n' > /etc/OpenCL/vendors/nvidia.icd
                 echo "cdi: OpenCL ICD JSON written (it names the injected SONAME)"
+            - run: the OpenCL ICD JSON names the injected SONAME
+              id: cdi-opencl-icd-names-soname
+              run_as: root
+              command: |
+                grep -qx 'libnvidia-opencl.so.1' /etc/OpenCL/vendors/nvidia.icd
             - run: no host-coupled driver library is baked — the injection is the only provider
               id: cdi-no-baked-driver-libs
               run_as: root
@@ -137,7 +143,7 @@ cdi:
                 vdpau="-name libvdpau_nvidia.so*"
                 # ── ONE LAYOUT DEFINITION ────────────────────────────────────────────────
                 # This step derives the library scan, the nvidia/vdpau tree checks AND the xorg
-                # check from a SINGLE `libs=` list, so the three surfaces cannot drift apart.
+                # check from a SINGLE `layouts=` list, so the three surfaces cannot drift apart.
                 #
                 # It is ONE variable for the fixture too. Pointing `CDI_LIB_DIRS` at a planted
                 # root moves the libraries, the trees and the xorg driver together, exactly as
