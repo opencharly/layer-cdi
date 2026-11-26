@@ -164,7 +164,9 @@ not the group mapping: a unit carrying `GroupAdd=keep-groups` — so the image u
 GPU groups instead of the image's — in the SAME keep-id + devices-only-spec + read-only-lib-bind
 shape starts and runs. Measured on the `charly-comfyui-cdi` unit: `UserNS=keep-id:uid=1000,gid=1000`,
 `GroupAdd=keep-groups`, `PodmanArgs=--cdi-spec-dir …` and 105 `/usr/lib/lib*` read-only binds;
-`uid_map` reads `1000 1000 1`; a live `comfyui-system-stats` check passes and a real prompt completes.
+`/proc/self/uid_map` reads `1000 0 1` then `1001 1001 64536` (container uid 1000 maps to the
+invoking host user; `id -u` inside is 1000); a live `comfyui-system-stats` check passes and a real
+prompt completes.
 A failing `keep-id + keep-groups` row elsewhere was measured against the **stock** spec, which still
 carries the mounts — the spec, not the group flag, is what EPERMs.
 
