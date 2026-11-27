@@ -160,7 +160,9 @@ shape this org forbids (D-HW-10): **no charly pod runs as container root**, and 
    `/etc/ld.so.cache` at container start. Measured: in the keep-id container the cache keeps its
    **image-build** timestamp and holds **0** `libcuda` entries, while the stock-spec container's
    cache mtime is the **container start** and holds **4** — and in both, `/usr/lib/libcuda.so`,
-   `.so.1` and the versioned file are present. So a consumer that resolves the driver *through the
+   `.so.1` and the versioned file are present. (Two different containers, hence two different
+   images; the causal proof is a bed's before/after pair on one image, which is what
+   opencharly/plugin-deploy-pod#104 gates.) So a consumer that resolves the driver *through the
    cache* fails while a direct `dlopen` user still works: `triton`'s `libcuda_dirs()` reads
    `ldconfig -p` and falls back to `LD_LIBRARY_PATH`, and with neither it asserts `libcuda.so cannot
    found!` — the first synthesis is a 500 with the library sitting at `/usr/lib`
